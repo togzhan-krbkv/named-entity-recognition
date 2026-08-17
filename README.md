@@ -45,9 +45,45 @@ Key characteristics of the data:
 
 Full split-by-split statistics are in `reports/eda.md`.
 
+## Baseline: CRF
+
+`src/ner/features.py` builds hand-crafted per-token features from word
+shape and a +/-1 context window: lowercased word, prefix/suffix,
+casing, digit and hyphen presence, and simple pattern checks for URLs,
+@mentions, and #hashtags. No word embeddings or gazetteers are used,
+so the baseline reflects what word-shape features alone can do.
+
+`src/ner/crf_model.py` wraps training and entity-level evaluation
+(`sklearn-crfsuite` for the CRF, `seqeval` for metrics). `scripts/train_crf.py`
+runs training on the train split, evaluates on dev, and writes the
+report to `reports/crf_baseline_eval.md`.
+
+Dev-split result: entity-level micro F1 of 0.183, versus 0.989 on the
+training data the model was fit on. That gap is the main finding of
+this baseline, not a bug: a small regularization sweep (`c1`, `c2`
+from 0.1 up to 3.0) made the train/dev gap worse, not better, which
+rules out simple overfitting as the cause. The features are built
+largely from word identity (lowercased word, prefix, suffix), and
+WNUT-17 is deliberately constructed so that entity surface forms
+rarely repeat across splits. A model that leans on word identity has
+little to transfer. This motivates the transformer baseline in the
+next milestone, which uses subword and contextual representations
+instead of memorized word forms.
+
+Per-type F1 on dev is uneven: `location` (0.291) and `person` (0.253)
+are the strongest, `corporation` (0.051) and `creative-work` (0.018)
+are weak, and `product` and `group` are not detected at all. This
+lines up with the entity type distribution from the EDA: the weakest
+categories are also the rarest in training data.
+
 ## Development history
 
 **Data pipeline.** Added a CoNLL parser and BIO-to-span converter
 (`src/ner/data.py`), a download script for the raw WNUT-17 files, and
 an exploratory analysis script covering split sizes, tag imbalance,
 entity type distribution, and entity length distribution.
+
+**CRF baseline.** Added hand-crafted word-shape features, a CRF
+training and evaluation pipeline with entity-level metrics, and a
+short regularization sweep to check whether the large train/dev gap
+was overfitting (it was not).
